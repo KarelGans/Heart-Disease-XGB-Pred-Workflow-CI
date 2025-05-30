@@ -1,0 +1,15 @@
+name: heart_disease_ci_env
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pandas
+  - numpy
+  - scikit-learn
+  - xgboost
+  - mlflow>=1.20
+  - matplotlib 
+  - seaborn    
+  - joblib
