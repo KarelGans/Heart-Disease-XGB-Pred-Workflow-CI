@@ -1,86 +1,60 @@
 name: MLflow Project CI - Retrain Heart Disease Model
 
-# When the workflow will run
 on:
   push:
     branches:
       - main # Or your default branch, e.g., master
     paths:
-      # Trigger if anything inside your MLflow Project folder changes
-      # Assuming your MLflow Project folder is named 'MLProject_Heart'
       - 'MLProject_Heart/**'
-      # Also trigger if the workflow file itself changes
-      - '.github/workflows/ci_retrain_workflow.yml'
-  workflow_dispatch: # Allows you to manually run this workflow from the Actions tab
+      - '.github/workflows/**'
+  workflow_dispatch:
 
 jobs:
-  retrain-and-log-model: # Name of the job
-    runs-on: ubuntu-latest # Specifies the runner environment
-    
-    defaults:
-      run:
-        # Set the working directory for subsequent run steps to be your MLflow Project folder
-        working-directory: ./MLProject_Heart 
+  retrain-and-log-model:
+    runs-on: ubuntu-latest
+    # REMOVE or COMMENT OUT the default working-directory here for now,
+    # OR be very careful with relative paths in each step.
+    # Let's remove it for now and use explicit paths where needed.
+    # defaults:
+    #   run:
+    #     working-directory: ./MLProject_Heart
 
     steps:
-      # Step 1: Check out your repository code
-      # This action checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Step 2: Set up Python environment
-      # Ensure this Python version is compatible with your conda.yaml
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10' 
+          python-version: '3.10'
 
-      # Step 3: Set up Conda (Miniconda) and create environment
-      # This action sets up Conda and caches environments for faster builds.
       - name: Set up Conda Environment
         uses: conda-incubator/setup-miniconda@v3
         with:
           auto-update-conda: true
-          python-version: '3.10' # Match the version in your conda.yaml
-          # The environment file is assumed to be 'conda.yaml' in the working directory (MLProject_Heart)
-          environment-file: conda.yaml 
-          # Specifies the name of the environment to create, matches your conda.yaml
-          activate-environment: heart_disease_ci_env 
-          # Use cached environment if available for speed
-          use-only-tar-bz2: true 
+          python-version: '3.10'
+          # Provide the path to conda.yaml relative to the repository root
+          environment-file: MLProject_Heart/conda.yaml # <--- CORRECTED PATH
+          activate-environment: heart_disease_ci_env
+          use-only-tar-bz2: true
 
-      # Step 4: Run your MLflow Project
-      # This command will execute the 'main' entry point defined in your MLProject_Heart/MLproject file
-      # using the 'heart_disease_ci_env' Conda environment.
       - name: Run MLflow Project for Model Retraining
-        shell: bash -el {0} # Ensures conda environment is activated correctly for this step
+        # Now, explicitly set the working directory for this step OR
+        # run mlflow with a path to the project
+        working-directory: ./MLProject_Heart # Set working directory for this specific step
+        shell: bash -el {0}
         run: |
-          # MLflow will create an mlruns directory locally within the runner's workspace (inside MLProject_Heart)
-          # You can pass parameters here to override defaults in MLproject file if needed, e.g.:
-          # mlflow run . -P n_estimators=150 --experiment-name "CI_Heart_Retraining"
+          # Now that we are in MLProject_Heart, 'mlflow run .' should work
           mlflow run . --experiment-name "CI_Heart_Disease_Retraining_Experiment"
           echo "MLflow run completed."
 
-      # Step 5: Upload MLflow tracking artifacts (the entire mlruns directory)
-      # This addresses the "Skilled" criteria of saving artifacts.
-      # The 'mlruns' directory is created by MLflow inside the working directory (MLProject_Heart).
       - name: Upload MLflow Run Artifacts
-        if: success() # Only run if previous steps succeed
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: mlflow-run-ci-artifacts # Name of the artifact bundle you'll download from GitHub
-          path: ./MLProject_Heart/mlruns # Path to the mlruns directory MLflow created
-          retention-days: 7 # Optional: How long to keep the artifact (default is 90)
-
-      # --- Optional: For "Advanced" criteria (saving a specific model file or pushing to Docker Hub) ---
-      # If your modelling.py saves a model like 'best_model.joblib' inside MLProject_Heart/models/
-      # you could upload it specifically:
-      # - name: Upload Trained Model File (Optional)
-      #   if: success()
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: trained-heart-model-ci
-      #     path: ./MLProject_Heart/models/best_model.joblib # Adjust this path if your script saves it elsewhere
-      #     retention-days: 7
-
-      # Docker steps for "Advanced" would go here if you were implementing that.
+          name: mlflow-run-ci-artifacts
+          # Path is relative to repository root if working-directory is not set for this step globally
+          # OR it's relative to the working-directory if set for the step.
+          # Since `mlruns` is created inside `MLProject_Heart` when `mlflow run .` is executed there:
+          path: MLProject_Heart/mlruns # <--- Path relative to GITHUB_WORKSPACE
+          retention-days: 7
