@@ -104,21 +104,24 @@ def train_model(data_filename="processed_heart_data.csv", n_estimators=100, lear
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_filename", type=str, default="heart_preprocessing/processed_heart_data.csv", 
-                        help="Path to the preprocessed CSV data file relative to the script's directory (e.g., MLProject_Heart/).")
+    parser.add_argument("--data_filename", type=str, default="processed_heart_data.csv", 
+                        help="Filename of the preprocessed CSV data, expected in the same directory as this script (MLProject_Heart/).")
     parser.add_argument("--n_estimators", type=int, default=100)
     parser.add_argument("--learning_rate", type=float, default=0.1)
     parser.add_argument("--max_depth", type=int, default=3)
-    parser.add_argument("--model_artifact_name", type=str, default="xgboost-ci-model-direct-run") # Different name for direct run
+    parser.add_argument("--model_artifact_name", type=str, default="xgboost-ci-model-default") # Consistent default
     
     args = parser.parse_args()
 
-    # For direct execution (python modelling.py), we need to explicitly start a run
-    # And set an experiment.
-    # The experiment name in `mlflow run` in your YAML takes precedence when run by GitHub Actions.
-    mlflow.set_experiment("CI_Heart_Disease_Models_Direct_Test") # Experiment for direct runs
-    with mlflow.start_run(run_name="Direct_Script_Run_XGBoost") as run:
-        print(f"Direct run started. MLflow Run ID: {run.info.run_id}")
+    # When this script is called by `mlflow run .`, an MLflow run is already active.
+    # We just call the train_model function, and it will log to that active run.
+    # The `mlflow.set_experiment()` and `mlflow.start_run()` below are for when you
+    # run `python modelling.py` directly from your terminal for local testing/debugging,
+    # *outside* of an `mlflow run` context.
+
+    if mlflow.active_run():
+        print("Detected active MLflow run (likely started by 'mlflow run .'). Using it.")
+        # The experiment is already set by `mlflow run --experiment-name ...`
         train_model(
             data_filename=args.data_filename,
             n_estimators=args.n_estimators,
@@ -126,3 +129,16 @@ if __name__ == '__main__':
             max_depth=args.max_depth,
             model_artifact_name=args.model_artifact_name
         )
+    else:
+        # This block is for when you run `python modelling.py` directly
+        print("No active MLflow run detected. Starting a new one for direct script execution.")
+        mlflow.set_experiment("Direct_Script_Test_Experiment") 
+        with mlflow.start_run(run_name="Direct_Python_Script_Run_XGBoost") as run:
+            print(f"Direct script run started. MLflow Run ID: {run.info.run_id}")
+            train_model(
+                data_filename=args.data_filename,
+                n_estimators=args.n_estimators,
+                learning_rate=args.learning_rate,
+                max_depth=args.max_depth,
+                model_artifact_name=args.model_artifact_name
+            )
