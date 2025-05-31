@@ -18,10 +18,10 @@ def train_model(data_filename="processed_heart_data.csv", n_estimators=100, lear
     """
     Loads data, trains an XGBoost model, and logs with MLflow.
     Data file is expected in the same directory as this script.
+    Assumes it's running within an active MLflow run when called by 'mlflow run'.
     """
     
-    # Construct data path relative to the script's location
-    script_dir = os.path.dirname(__file__) if '__file__' in locals() else '.' # Get directory of current script
+    script_dir = os.path.dirname(__file__) if '__file__' in locals() else '.'
     data_path = os.path.join(script_dir, data_filename)
     
     print(f"Attempting to load data from: {data_path}")
@@ -31,7 +31,7 @@ def train_model(data_filename="processed_heart_data.csv", n_estimators=100, lear
     except FileNotFoundError:
         print(f"Error: Data file not found at {data_path}")
         print(f"Ensure '{data_filename}' is in the same directory as modelling.py (e.g., MLProject_Heart/).")
-        return
+        return # Exit if data not found
     except Exception as e:
         print(f"Error loading data: {e}")
         return
@@ -44,72 +44,85 @@ def train_model(data_filename="processed_heart_data.csv", n_estimators=100, lear
     y = df["HeartDisease"]
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
-    with mlflow.start_run() as run:
-        run_id = run.info.run_id
-        print(f"MLflow Run ID: {run_id}")
+    # The MLflow run is already started by `mlflow run .`
+    # We can get the current run's info if needed, but logging will happen to the active run.
+    active_run = mlflow.active_run()
+    if active_run:
+        print(f"Logging to active MLflow Run ID: {active_run.info.run_id}")
         print(f"MLflow Tracking URI: {mlflow.get_tracking_uri()}")
+    else:
+        print("Warning: Not running within an active MLflow run. Metrics/params might not be logged as expected by 'mlflow run'.")
+        # This case is more for when you run the script directly without an outer mlflow.start_run()
 
-        mlflow.log_param("data_file", data_filename) # Log the data filename used
-        mlflow.log_param("n_estimators", n_estimators)
-        mlflow.log_param("learning_rate", learning_rate)
-        mlflow.log_param("max_depth", max_depth)
-        
-        print(f"Training XGBoost with n_estimators={n_estimators}, learning_rate={learning_rate}, max_depth={max_depth}")
-        
-        model = XGBClassifier(
-            n_estimators=n_estimators,
-            learning_rate=learning_rate,
-            max_depth=max_depth,
-            use_label_encoder=False,
-            eval_metric='logloss',
-            random_state=42
-        )
-        model.fit(X_train, y_train)
+    mlflow.log_param("data_file", data_filename)
+    mlflow.log_param("n_estimators", n_estimators)
+    mlflow.log_param("learning_rate", learning_rate)
+    mlflow.log_param("max_depth", max_depth)
+    
+    print(f"Training XGBoost with n_estimators={n_estimators}, learning_rate={learning_rate}, max_depth={max_depth}")
+    
+    model = XGBClassifier(
+        n_estimators=n_estimators,
+        learning_rate=learning_rate,
+        max_depth=max_depth,
+        use_label_encoder=False,
+        eval_metric='logloss',
+        random_state=42
+    )
+    model.fit(X_train, y_train)
 
-        y_pred = model.predict(X_test)
-        y_proba = model.predict_proba(X_test)[:, 1]
+    y_pred = model.predict(X_test)
+    y_proba = model.predict_proba(X_test)[:, 1]
 
-        accuracy = accuracy_score(y_test, y_pred)
-        precision = precision_score(y_test, y_pred, zero_division=0)
-        recall = recall_score(y_test, y_pred, zero_division=0)
-        f1 = f1_score(y_test, y_pred, zero_division=0)
-        roc_auc = roc_auc_score(y_test, y_proba)
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred, zero_division=0)
+    recall = recall_score(y_test, y_pred, zero_division=0)
+    f1 = f1_score(y_test, y_pred, zero_division=0)
+    roc_auc = roc_auc_score(y_test, y_proba)
 
-        mlflow.log_metric("accuracy", accuracy)
-        mlflow.log_metric("precision", precision)
-        mlflow.log_metric("recall", recall)
-        mlflow.log_metric("f1_score", f1)
-        mlflow.log_metric("roc_auc", roc_auc)
+    mlflow.log_metric("accuracy", accuracy)
+    mlflow.log_metric("precision", precision)
+    mlflow.log_metric("recall", recall)
+    mlflow.log_metric("f1_score", f1)
+    mlflow.log_metric("roc_auc", roc_auc)
 
-        print(f"\nTest Metrics:")
-        print(f"  Accuracy: {accuracy:.4f}")
-        print(f"  F1 Score: {f1:.4f}") # Added F1 for direct comparison
+    print(f"\nTest Metrics:")
+    print(f"  Accuracy: {accuracy:.4f}")
+    print(f"  F1 Score: {f1:.4f}")
 
-        mlflow.xgboost.log_model(
-            xgb_model=model,
-            artifact_path=model_artifact_name
-        )
-        print(f"Model logged to MLflow artifact path: {model_artifact_name}")
+    mlflow.xgboost.log_model(
+        xgb_model=model,
+        artifact_path=model_artifact_name
+    )
+    print(f"Model logged to MLflow artifact path: {model_artifact_name}")
+
+    # Example of logging a simple text artifact (like a model summary)
+    model_summary = f"Model: XGBoost\nParameters: {model.get_params()}\nTest Accuracy: {accuracy:.4f}"
+    mlflow.log_text(model_summary, "model_summary.txt")
+    print("Model summary logged as model_summary.txt")
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    # data_path parameter now refers to just the filename if it's in the same directory
-    parser.add_argument("--data_filename", type=str, default="processed_heart_data.csv", 
-                        help="Filename of the preprocessed CSV data, expected in the same directory as the script.")
+    parser.add_argument("--data_filename", type=str, default="heart_preprocessing/processed_heart_data.csv", 
+                        help="Path to the preprocessed CSV data file relative to the script's directory (e.g., MLProject_Heart/).")
     parser.add_argument("--n_estimators", type=int, default=100)
     parser.add_argument("--learning_rate", type=float, default=0.1)
     parser.add_argument("--max_depth", type=int, default=3)
-    parser.add_argument("--model_artifact_name", type=str, default="xgboost-ci-model")
+    parser.add_argument("--model_artifact_name", type=str, default="xgboost-ci-model-direct-run") # Different name for direct run
     
     args = parser.parse_args()
 
-    if not mlflow.active_run():
-        mlflow.set_experiment("CI_Heart_Disease_Models_Root_Data")
-
-    train_model(
-        data_filename=args.data_filename, # Pass just the filename
-        n_estimators=args.n_estimators,
-        learning_rate=args.learning_rate,
-        max_depth=args.max_depth,
-        model_artifact_name=args.model_artifact_name
-    )
+    # For direct execution (python modelling.py), we need to explicitly start a run
+    # And set an experiment.
+    # The experiment name in `mlflow run` in your YAML takes precedence when run by GitHub Actions.
+    mlflow.set_experiment("CI_Heart_Disease_Models_Direct_Test") # Experiment for direct runs
+    with mlflow.start_run(run_name="Direct_Script_Run_XGBoost") as run:
+        print(f"Direct run started. MLflow Run ID: {run.info.run_id}")
+        train_model(
+            data_filename=args.data_filename,
+            n_estimators=args.n_estimators,
+            learning_rate=args.learning_rate,
+            max_depth=args.max_depth,
+            model_artifact_name=args.model_artifact_name
+        )

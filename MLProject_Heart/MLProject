@@ -1,25 +1,15 @@
-name: HeartDiseaseCIProject # A descriptive name for your MLflow Project
+name: HeartDiseaseCIProject # Or your preferred project name
 
-# Specifies the Conda environment to be used to run the project's entry points.
-# MLflow will create and activate this environment before running your code.
 conda_env: conda.yaml
 
-# Defines the entry points (commands) that can be run in this project.
 entry_points:
-  main: # This is a common name for the primary entry point
-    # Parameters that can be passed to this entry point when using 'mlflow run'
-    # These should correspond to the arguments your modelling.py script expects.
+  main:
     parameters:
-      data_filename: {type: str, default: "processed_heart_data.csv"} # Filename for processed data
+      data_filename: {type: str, default: "processed_heart_data.csv"} # Corrected default
       n_estimators: {type: int, default: 100}
       learning_rate: {type: float, default: 0.1}
       max_depth: {type: int, default: 3}
-      model_artifact_name: {type: str, default: "xgboost-ci-model-default"}
-      # Add any other parameters your modelling.py script accepts via argparse
-
-    # The command to execute for this entry point.
-    # It runs your Python script, passing the parameters defined above.
-    # Placeholders like {data_filename} will be replaced by the actual parameter values.
+      model_artifact_name: {type: str, default: "xgboost-ci-model-default"} # Default name from previous logs
     command: >-
       python modelling.py 
       --data_filename {data_filename} 
